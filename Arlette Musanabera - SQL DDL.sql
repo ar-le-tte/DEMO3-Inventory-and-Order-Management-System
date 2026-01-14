@@ -111,4 +111,82 @@ INSERT INTO customers (customer_id, full_name, email, phone, shipping_address, c
 
 SELECT customer_id, full_name, email
 FROM customers;
+-- PRODUCTS
+INSERT INTO products (product_id, product_name, category, price_usd, created_at) VALUES
+(3012, 'Wireless Mouse', 'Digital Gadgets', 15.99, '2024-03-12 10:20:00'),
+(3077, 'Unisex Hoodie', 'Clothes', 29.99, '2024-04-18 13:40:00'),
+(3129, 'Silver Necklace', 'Jewelry', 45.00, '2024-03-28 11:15:00'),
+(3184, 'Yoga Mat', 'Sports', 18.00, '2024-02-07 09:10:00'),
+(3241, 'Running Shoes', 'Shoes', 60.00, '2024-08-25 17:05:00'),
+(3356, 'USB-C Fast Charger', 'Digital Gadgets', 19.50, '2024-05-06 14:45:00'),
+(3410, 'Cotton T-Shirt', 'Clothes', 12.50, '2024-06-09 08:50:00'),
+(3473, 'Gold-Plated Bracelet', 'Jewelry', 38.50, '2024-05-17 16:05:00'),
+(3528, 'Football', 'Sports', 22.00, '2024-01-19 14:35:00'),
+(3599, 'Smartwatch', 'Digital Gadgets', 85.00, '2024-09-02 16:10:00'),
+(3651, 'Denim Jeans', 'Clothes', 42.00, '2024-11-03 10:25:00'),
+(3716, 'Portable Power Bank', 'Digital Gadgets', 27.90, '2024-10-21 11:55:00'),
+(3782, 'Baseball Cap', 'Clothes', 9.99, '2024-12-12 15:40:00'),
+(3837, 'Bluetooth Headphones', 'Digital Gadgets', 55.00, '2024-07-18 09:30:00');
 
+
+SELECT product_id, product_name, category, price_usd
+FROM products
+ORDER BY product_id;
+
+--INVENTORY
+INSERT INTO inventory (product_id, quantity_on_hand, last_updated)
+SELECT
+  product_id,
+  (random() * 200)::int AS quantity_on_hand,
+  NOW() AS last_updated
+FROM products;
+
+-- ORDERS (We will first set the amount to zero to be updated later)
+INSERT INTO orders (order_id, customer_id, order_date, total_order_amount, order_status, created_at) VALUES
+(5001, 1017, '2024-06-14', 0, 'Delivered', '2024-06-14 10:42:00'),
+(5002, 1042, '2024-07-03', 0, 'Shipped',   '2024-07-03 14:18:00'),
+(5003, 1098, '2024-08-21', 0, 'Delivered', '2024-08-21 09:55:00'),
+(5004, 1125, '2024-09-02', 0, 'Pending',   '2024-09-02 16:07:00'),
+(5005, 1189, '2024-09-18', 0, 'Delivered', '2024-09-18 11:33:00'),
+(5006, 1234, '2024-10-05', 0, 'Shipped',   '2024-10-05 15:41:00'),
+(5007, 1276, '2024-10-29', 0, 'Delivered', '2024-10-29 08:26:00'),
+(5017, 1042, '2025-03-15', 0, 'Delivered', '2025-03-15 11:46:00'),
+(5008, 1311, '2024-11-11', 0, 'Pending',   '2024-11-11 17:02:00'),
+(5009, 1367, '2024-11-24', 0, 'Delivered', '2024-11-24 13:19:00'),
+(5010, 1402, '2024-12-06', 0, 'Shipped',   '2024-12-06 09:48:00'),
+(5011, 1459, '2024-12-19', 0, 'Delivered', '2024-12-19 18:05:00'),
+(5012, 1493, '2025-01-04', 0, 'Pending',   '2025-01-04 12:11:00'),
+(5013, 1528, '2025-01-17', 0, 'Delivered', '2025-01-17 10:37:00'),
+(5014, 1574, '2025-02-02', 0, 'Shipped',   '2025-02-02 14:54:00'),
+(5015, 1610, '2025-02-18', 0, 'Delivered', '2025-02-18 09:22:00'),
+(5016, 1017, '2025-03-01', 0, 'Pending',   '2025-03-01 16:30:00');
+
+SELECT * FROM orders;
+
+-- ORDER ITEMS
+WITH items(order_id, product_id, quantity) AS (
+  VALUES
+    (5001, 3012, 2), (5001, 3077, 1), (5002, 3129, 1),
+    (5002, 3184, 2), (5003, 3241, 1), (5004, 3356, 3),
+    (5005, 3410, 2), (5005, 3473, 1), (5006, 3528, 1),
+    (5006, 3599, 1), (5007, 3651, 2), (5008, 3716, 1),
+    (5008, 3782, 2), (5009, 3837, 1), (5010, 3012, 1),
+    (5010, 3241, 1), (5011, 3129, 2), (5012, 3356, 1), 
+    (5013, 3410, 3), (5014, 3473, 1), (5014, 3528, 2),
+    (5015, 3599, 1), (5016, 3651, 2), (5016, 3782, 1),
+    (5017, 3837, 2)),
+missing_products AS (
+  SELECT DISTINCT i.product_id
+  FROM items i
+  LEFT JOIN products p ON p.product_id = i.product_id
+  WHERE p.product_id IS NULL
+)
+INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+SELECT
+  i.order_id,
+  i.product_id,
+  i.quantity,
+  p.price_usd
+FROM items i
+JOIN products p ON p.product_id = i.product_id
+WHERE NOT EXISTS (SELECT 1 FROM missing_products);
