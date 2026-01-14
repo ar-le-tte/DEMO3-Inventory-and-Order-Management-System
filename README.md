@@ -20,3 +20,10 @@ We created all tables defined in the ERD, specifying appropriate data types, and
 
 The resulting schema ensures a normalized structure and consistent relationships between the tables: customers, products, inventory, orders, and order items.
 
+## Step 3: Business KPIs and Advanced SQL Queries
+
+To evaluate the performance of the system, several business Key Performance Indicators (KPIs) using SQL queries. 
+
+Aggregations, joins, and filtering conditions were used to extract meaningful metrics from transactional data.
+
+
