@@ -11,3 +11,12 @@ The ERD is provided in **two formats** for clarity and accessibility:
 - **PNG version** – For quick reference and visualization
 
 Both versions illustrate the normalized schema (3NF), primary and foreign keys, and the relationships between customers, products, inventory, orders, and order items.
+
+## Schema Implementation (DDL)
+
+The database schema was implemented using SQL Data Definition Language (DDL) statements. 
+
+We created all tables defined in the ERD, specifying appropriate data types, and enforcing data integrity through primary keys, foreign keys, NOT NULL constraints, and CHECK constraints. 
+
+The resulting schema ensures a normalized structure and consistent relationships between the tables: customers, products, inventory, orders, and order items.
+
