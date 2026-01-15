@@ -86,3 +86,94 @@ SELECT c.full_name, o.order_id, o.order_date,
 FROM orders o
 JOIN customers c ON c.customer_id = o.customer_id
 ORDER BY c.full_name, o.order_date;
+
+-- PERFORMANCE OPTIMIZATION
+
+-- 1. CustomerSalesSummary
+CREATE OR REPLACE VIEW CustomerSalesSummary AS
+SELECT c.customer_id, c.full_name,
+  COUNT(o.order_id) AS total_orders,
+  ROUND(COALESCE(SUM(o.total_order_amount), 0)::numeric, 2) AS total_amount_spent_usd
+FROM customers c
+LEFT JOIN orders o
+  ON o.customer_id = c.customer_id
+ AND o.order_status IN ('Shipped', 'Delivered')
+GROUP BY c.customer_id;
+
+SELECT *
+FROM CustomerSalesSummary
+ORDER BY total_amount_spent_usd DESC
+LIMIT 10;
+
+-- 2. Stored Procedure
+CREATE OR REPLACE PROCEDURE ProcessNewOrder(
+  IN CustomerID INT,  -- Customer ID
+  IN ProductID  INT,  -- Product ID
+  IN quantity    INT   -- Quantity
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  stock    INT;
+  price    NUMERIC(10,2);
+  v_order_id INT;
+BEGIN
+  -- Quantity Validation
+  IF quantity <= 0 THEN
+    RAISE EXCEPTION 'Please enter a non-zero quantity';
+  END IF;
+
+  -- Checking available inventory and locking row
+  SELECT quantity_on_hand
+  INTO stock
+  FROM inventory
+  WHERE inventory.product_id = product_id
+  FOR UPDATE;
+
+  IF stock IS NULL THEN
+    RAISE EXCEPTION 'Product % not found in inventory', product_id;
+  END IF;
+
+  IF stock < quantity THEN
+    RAISE EXCEPTION
+      'Insufficient stock for product %. Available: %, Requested: %',
+      ProductID, stock, quantity;
+  END IF;
+
+  -- Price
+  SELECT price_usd
+  INTO price
+  FROM products
+  WHERE products.product_id = ProductID;
+
+  IF price IS NULL THEN
+    RAISE EXCEPTION 'Product % not found in products table', product_id;
+  END IF;
+
+  -- Now We Create The Order
+  INSERT INTO orders (customer_id, order_date, total_order_amount, order_status, created_at)
+  VALUES (CustomerID, CURRENT_DATE, 0, 'Pending', CURRENT_TIMESTAMP)
+  RETURNING order_id INTO v_order_id;
+
+  -- Now the order items
+  INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+  VALUES (v_order_id, ProductID, quantity, price);
+
+  -- Reducting the ordered items from the available stock (Inventory Update)
+  UPDATE inventory
+  SET quantity_on_hand = quantity_on_hand - quantity,
+      last_updated = CURRENT_TIMESTAMP
+  WHERE inventory.product_id = ProductID;
+
+  -- Updating the order total with our price*the quantity ordered
+  UPDATE orders
+  SET total_order_amount = ROUND((quantity * price)::numeric, 2)
+  WHERE order_id = v_order_id;
+
+END;
+$$;
+
+CALL ProcessNewOrder(1311, 3012, 2);
+
+
+select * from order_items;
