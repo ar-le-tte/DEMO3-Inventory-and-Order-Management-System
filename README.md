@@ -26,4 +26,5 @@ To evaluate the performance of the system, several business Key Performance Indi
 
 Aggregations, joins, and filtering conditions were used to extract meaningful metrics from transactional data.
 
+In addition to standard KPIs, analytical queries were implemented using SQL window functions. These queries enable more advanced analysis, such as ranking.
 

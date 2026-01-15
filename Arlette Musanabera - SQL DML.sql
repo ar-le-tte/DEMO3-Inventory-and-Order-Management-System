@@ -56,3 +56,33 @@ WHERE o.order_status IN ('Shipped', 'Delivered')
 GROUP BY DATE_TRUNC('month', o.order_date)
 ORDER BY DATE_TRUNC('month', o.order_date);
 
+-- ANALYTICAL QUERIES
+
+-- 1. Sales Rank by Category
+WITH product_sales AS (
+  SELECT p.category, p.product_id, p.product_name,
+    SUM(oi.quantity * oi.price_at_purchase) AS revenue
+  FROM order_items oi
+  JOIN orders o   ON o.order_id = oi.order_id
+  JOIN products p ON p.product_id = oi.product_id
+  WHERE o.order_status IN ('Shipped', 'Delivered')
+  GROUP BY p.category, p.product_id, p.product_name
+),
+ranked AS (
+  SELECT category, product_name, revenue,
+    DENSE_RANK() OVER (PARTITION BY category ORDER BY revenue DESC) AS rank_in_category
+  FROM product_sales
+)
+SELECT category,product_name,
+   ROUND(revenue::numeric, 2) AS revenue_usd,
+  rank_in_category AS sales_rank_in_category,
+  '#' || rank_in_category || ' in ' || category AS category_rank_label
+FROM ranked
+ORDER BY category, rank_in_category, revenue DESC;
+
+-- 2. Customer Order Frequency
+SELECT c.full_name, o.order_id, o.order_date,
+  LAG(o.order_date) OVER (PARTITION BY o.customer_id ORDER BY o.order_date) AS previous_order_date
+FROM orders o
+JOIN customers c ON c.customer_id = o.customer_id
+ORDER BY c.full_name, o.order_date;
