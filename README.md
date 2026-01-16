@@ -10,7 +10,10 @@ The ERD is provided in **two formats** for clarity and accessibility:
 - **PDF version** – suitable for detailed review and documentation
 - **PNG version** – For quick reference and visualization
 
-Both versions illustrate the normalized schema (3NF), primary and foreign keys, and the relationships between customers, products, inventory, orders, and order items.
+Both versions illustrate the normalized schema (3NF), primary and foreign keys, and the relationships between customers, products, inventory, orders, and order items:
+
+![Inventory and Order Management ERD](erd.png)
+
 
 ## Schema Implementation (DDL)
 

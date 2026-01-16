@@ -65,7 +65,7 @@ CREATE TABLE orders (
 -- This is a bridge table
 -- -------------------------
 CREATE TABLE order_items (
-  order_id           INT NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+  order_id           INT NOT NULL REFERENCES orders(order_id) ON DELETE RESTRICT,
   product_id         INT NOT NULL REFERENCES products(product_id) ON DELETE RESTRICT,
   quantity           INT NOT NULL,
   price_at_purchase  NUMERIC(10,2) NOT NULL,

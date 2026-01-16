@@ -107,73 +107,124 @@ LIMIT 10;
 
 -- 2. Stored Procedure
 CREATE OR REPLACE PROCEDURE ProcessNewOrder(
-  IN CustomerID INT,  -- Customer ID
-  IN ProductID  INT,  -- Product ID
-  IN quantity    INT   -- Quantity
+  IN CustomerID  INT,    
+  IN ProductIDs  INT[],   -- List of Product IDs
+  IN Quantities  INT[]    -- Corresponding quantities
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  stock    INT;
-  price    NUMERIC(10,2);
-  v_order_id INT;
+  v_order_id   INT;
+  v_total      NUMERIC(10,2);
+  v_len_p      INT;
+  v_len_q      INT;
+  v_missing_products text;
+  v_short_msg text;
+
 BEGIN
-  -- Quantity Validation
-  IF quantity <= 0 THEN
-    RAISE EXCEPTION 'Please enter a non-zero quantity';
+  -- Input Validation
+  IF NOT EXISTS (
+    SELECT 1
+    FROM customers
+    WHERE customer_id = CustomerID
+  ) THEN
+    RAISE EXCEPTION 'Customer % does not exist', CustomerID;
+  END IF;
+
+  v_len_p := COALESCE(array_length(ProductIDs, 1), 0);
+  v_len_q := COALESCE(array_length(Quantities, 1), 0);
+
+  IF v_len_p = 0 OR v_len_q = 0 THEN
+    RAISE EXCEPTION 'ProductIDs and Quantities must not be empty';
+  END IF;
+
+  IF v_len_p <> v_len_q THEN
+    RAISE EXCEPTION 'ProductIDs and Quantities must have the same length';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM unnest(Quantities) q WHERE q <= 0
+  ) THEN
+    RAISE EXCEPTION 'All quantities must be greater than zero';
   END IF;
 
   -- Checking available inventory and locking row
-  SELECT quantity_on_hand
-  INTO stock
-  FROM inventory
-  WHERE inventory.product_id = product_id
-  FOR UPDATE;
+	WITH items AS (SELECT x.product_id, SUM(x.qty) AS qty
+	  FROM unnest(ProductIDs, Quantities) AS x(product_id, qty)
+	  GROUP BY x.product_id),
+	shortage AS (
+	  SELECT i.product_id, i.qty AS requested_qty, inv.quantity_on_hand AS available_qty
+	  FROM items i
+	  JOIN inventory inv ON inv.product_id = i.product_id
+      WHERE inv.quantity_on_hand < i.qty
+	  FOR UPDATE)
+	SELECT
+	  string_agg(format('product_id=%s (requested=%s, available=%s)',
+	           product_id, requested_qty, available_qty),'; ')
+	INTO v_short_msg
+	FROM shortage;
+	
+	IF v_short_msg IS NOT NULL THEN
+	  RAISE EXCEPTION 'Insufficient stock: %', v_short_msg;
+	END IF;
 
-  IF stock IS NULL THEN
-    RAISE EXCEPTION 'Product % not found in inventory', product_id;
-  END IF;
 
-  IF stock < quantity THEN
-    RAISE EXCEPTION
-      'Insufficient stock for product %. Available: %, Requested: %',
-      ProductID, stock, quantity;
-  END IF;
+  -- Ensuring that all products exist in inventory
+	SELECT string_agg(p.product_id::text, ', ')
+	INTO v_missing_products
+	FROM ( SELECT DISTINCT product_id
+	  FROM unnest(ProductIDs) AS t(product_id)) p
+	LEFT JOIN inventory inv
+	  ON inv.product_id = p.product_id
+	WHERE inv.product_id IS NULL;
+	
+	IF v_missing_products IS NOT NULL THEN
+	  RAISE EXCEPTION 'The following product_id(s) do not exist in inventory: %', v_missing_products;
+	END IF;
 
-  -- Price
-  SELECT price_usd
-  INTO price
-  FROM products
-  WHERE products.product_id = ProductID;
 
-  IF price IS NULL THEN
-    RAISE EXCEPTION 'Product % not found in products table', product_id;
-  END IF;
-
-  -- Now We Create The Order
+  -- Now let us create the order
   INSERT INTO orders (customer_id, order_date, total_order_amount, order_status, created_at)
   VALUES (CustomerID, CURRENT_DATE, 0, 'Pending', CURRENT_TIMESTAMP)
   RETURNING order_id INTO v_order_id;
 
   -- Now the order items
+  WITH items AS (SELECT x.product_id, SUM(x.qty) AS qty
+    FROM unnest(ProductIDs, Quantities) AS x(product_id, qty)
+    GROUP BY x.product_id)
   INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
-  VALUES (v_order_id, ProductID, quantity, price);
+  SELECT v_order_id, i.product_id, i.qty, p.price_usd
+  FROM items i
+  JOIN products p ON p.product_id = i.product_id;
 
-  -- Reducting the ordered items from the available stock (Inventory Update)
-  UPDATE inventory
-  SET quantity_on_hand = quantity_on_hand - quantity,
+-- Deducting the ordered items from the available stock (Inventory Update)
+  WITH items AS (
+    SELECT x.product_id, SUM(x.qty) AS qty
+    FROM unnest(ProductIDs, Quantities) AS x(product_id, qty)
+    GROUP BY x.product_id)
+  UPDATE inventory inv
+  SET quantity_on_hand = inv.quantity_on_hand - i.qty,
       last_updated = CURRENT_TIMESTAMP
-  WHERE inventory.product_id = ProductID;
+  FROM items i
+  WHERE inv.product_id = i.product_id;
 
   -- Updating the order total with our price*the quantity ordered
+  SELECT ROUND(SUM(oi.quantity * oi.price_at_purchase)::numeric, 2)
+  INTO v_total
+  FROM order_items oi
+  WHERE oi.order_id = v_order_id;
+
   UPDATE orders
-  SET total_order_amount = ROUND((quantity * price)::numeric, 2)
+  SET total_order_amount = COALESCE(v_total, 0)
   WHERE order_id = v_order_id;
 
 END;
 $$;
 
-CALL ProcessNewOrder(1311, 3012, 2);
+
+CALL ProcessNewOrder(1017,
+  ARRAY[3012, 3077, 3599],
+  ARRAY[2,    1,    1]);
 
 
 select * from order_items;
